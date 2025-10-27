@@ -54,7 +54,7 @@ All AI inference and AR rendering occur locally on the iPhone for low latency an
 - 5MP camera module (OV5647 sensor)
 - MATEK F405 Flight Controller
 - XING2 Brushless Motors
-- ExpressLRS receiver + 5.8 GHz FPV transmitter
+- ExpressLRS receiver + 5.8 GHz FPV transmitter<br>
 **Software**
 - Python / C++ (Drone Control + Data Processing)
 - Swift + ARKit + CoreML (iOS App)
