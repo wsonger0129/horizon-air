@@ -79,9 +79,10 @@ HorizonAir operates strictly within visual line-of-sight (VLOS) guidelines. The 
 - AI expansion to include wildlife, vegetation, or environmental feature recognition.
 
 ## 📸 Project Media
+UI Demo: https://www.figma.com/make/NR0lhKH9YONebttn2HyJp3/Drone-App-User-Interface?node-id=0-4&t=Jk5vTnboOdW3TGkD-1
+
 To be added:
 - System architecture diagram
-- App interface mockups
 - Drone setup photos
 - Demo video link
 
