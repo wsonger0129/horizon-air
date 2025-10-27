@@ -1,2 +1,2 @@
-# senior-design-project
-senior design project w max and andrew
+# HorizonAir
+by Andrew Muntek To, Maxwell Hsieh, and Whitney Songer
