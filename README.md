@@ -1,5 +1,5 @@
 # 🌄 HorizonAir
-By Andrew Muntek To, Maxwell Hsieh, and Whitney Songer  University of California, Irvine — Computer Engineering Senior Design Project
+By Andrew Muntek To, Maxwell Hsieh, and Whitney Songer<br>University of California, Irvine — Computer Engineering Senior Design Project
 
 ## 📘 Overview
 
