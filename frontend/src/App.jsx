@@ -12,12 +12,12 @@ export default function App() {
   return (
     <div className="app">
       <AppHeader />
+      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
       <main className="app__main" role="main">
         {activeTab === 'feed' && <LiveFeedTab />}
         {activeTab === 'camera' && <CameraNavTab />}
         {activeTab === 'alerts' && <ScenicAlertsTab />}
       </main>
-      <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
     </div>
   );
 }

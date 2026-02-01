@@ -3,9 +3,9 @@
   justify-content: space-around;
   align-items: stretch;
   height: var(--tab-height);
-  padding-bottom: var(--safe-bottom);
+  padding-top: 4px;
   background: var(--bg-secondary);
-  border-top: 2px solid var(--border);
+  border-bottom: 2px solid var(--border);
   flex-shrink: 0;
 }
 
@@ -47,6 +47,6 @@
   .tab-bar {
     max-width: 480px;
     margin: 0 auto;
-    border-radius: 16px 16px 0 0;
+    border-radius: 0 0 16px 16px;
   }
 }
