@@ -1,0 +1,70 @@
+.camera-view {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  text-align: center;
+  background: var(--bg-secondary);
+}
+
+.camera-view__video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.camera-view__icon {
+  font-size: 2.5rem;
+  display: block;
+  margin-bottom: 12px;
+}
+
+.camera-view__message {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.camera-view__hint {
+  margin: 8px 0 16px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  max-width: 280px;
+}
+
+.camera-view__btn {
+  min-height: 48px;
+  padding: 12px 24px;
+  font-size: 1rem;
+  font-weight: 600;
+  background: var(--accent);
+  color: var(--text-primary);
+  border-radius: 12px;
+}
+
+.camera-view__btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.camera-view__btn--stop {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--danger);
+}
+
+.camera-view--error .camera-view__message {
+  color: var(--danger);
+}
+
+.camera-view--active {
+  padding: 0;
+  justify-content: flex-end;
+}

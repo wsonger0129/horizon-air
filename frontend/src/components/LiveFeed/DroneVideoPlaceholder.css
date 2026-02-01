@@ -1,0 +1,46 @@
+.drone-video {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-card) 100%);
+}
+
+.drone-video__placeholder {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-secondary);
+}
+
+.drone-video__icon {
+  font-size: 3rem;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.drone-video__label {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.drone-video__hint {
+  margin: 8px 0 0;
+  font-size: 0.875rem;
+  max-width: 260px;
+}
+
+.drone-video__live-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  padding: 4px 10px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  background: var(--danger);
+  color: var(--text-primary);
+  border-radius: 6px;
+}
