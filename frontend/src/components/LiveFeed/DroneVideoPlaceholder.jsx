@@ -1,18 +1,38 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { getPiBaseUrl } from '../../config/pi';
 import './DroneVideoPlaceholder.css';
 
 /**
- * Placeholder for MJPEG/WebRTC drone stream. Replace <div> with <video> or
- * MJPEG img src when backend provides stream URL.
+ * Live MJPEG drone stream from Pi. Shows connecting/placeholder on error.
  */
 export function DroneVideoPlaceholder() {
+  const [status, setStatus] = useState('connecting'); // 'connecting' | 'playing' | 'error'
+  const piBaseUrl = getPiBaseUrl();
+  const videoFeedUrl = `${piBaseUrl}/video_feed`;
+
+  const showPlaceholder = status === 'connecting' || status === 'error';
+
   return (
     <div className="drone-video" aria-label="Live drone camera feed">
-      <div className="drone-video__placeholder">
-        <span className="drone-video__icon" aria-hidden>📡</span>
-        <p className="drone-video__label">Live Drone Feed</p>
-        <p className="drone-video__hint">Stream placeholder — connect to drone for MJPEG/WebRTC</p>
-      </div>
+      {showPlaceholder && (
+        <div className="drone-video__placeholder">
+          <span className="drone-video__icon" aria-hidden>📡</span>
+          <p className="drone-video__label">Live Drone Feed</p>
+          <p className="drone-video__hint">
+            {status === 'connecting'
+              ? 'Connecting…'
+              : 'Stream unavailable — check drone connection'}
+          </p>
+        </div>
+      )}
+      <img
+        className="drone-video__stream"
+        src={videoFeedUrl}
+        alt="Live drone camera"
+        style={{ display: showPlaceholder ? 'none' : 'block' }}
+        onLoad={() => setStatus('playing')}
+        onError={() => setStatus('error')}
+      />
       <div className="drone-video__live-badge">LIVE</div>
     </div>
   );

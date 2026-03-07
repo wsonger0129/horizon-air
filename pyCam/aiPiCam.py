@@ -1,5 +1,5 @@
 from picamera2 import Picamera2, Preview
-from flask import Flask, Response
+from flask import Flask, Response, jsonify
 import threading
 import cv2
 import numpy as np
@@ -33,6 +33,15 @@ os.makedirs(output_dir, exist_ok=True)
 # Flask Video Streaming Setup
 # -------------------------
 app = Flask(__name__)
+
+
+# CORS so React app (on laptop or phone) can call API from another origin
+@app.after_request
+def add_cors_headers(response):
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
 
 def gen_frames():
     global all_objects_detected, recording
@@ -83,6 +92,53 @@ def stop_recording_after_delay(filename):
 def video_feed():
     return Response(gen_frames(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+# -------------------------
+# API: telemetry, scenic, ping (for HorizonAir app)
+# -------------------------
+
+@app.route('/api/telemetry')
+def api_telemetry():
+    """Mock telemetry; replace with flight controller data later."""
+    return jsonify({
+        "altitude": 42,
+        "altitudeUnit": "m",
+        "batteryPercent": 78,
+        "signalStrength": 4,
+        "signalMax": 5,
+    })
+
+
+@app.route('/api/scenic')
+def api_scenic():
+    """Mock scenic/vista alerts; replace with detector output later."""
+    import time as t
+    now_ms = int(t.time() * 1000)
+    return jsonify([
+        {
+            "id": "1",
+            "thumbnail": "",
+            "description": "Wide mountain vista detected — clear view to the east.",
+            "timestamp": now_ms - 2 * 60 * 1000,
+            "location": {"lat": 33.647, "lng": -117.843},
+            "confidence": 0.92,
+        },
+        {
+            "id": "2",
+            "thumbnail": "",
+            "description": "Scenic clearing with lake view ahead.",
+            "timestamp": now_ms - 8 * 60 * 1000,
+            "location": {"lat": 33.648, "lng": -117.844},
+            "confidence": 0.88,
+        },
+    ])
+
+
+@app.route('/api/ping')
+def api_ping():
+    """Heartbeat for connection strength; client uses ts to compute RTT."""
+    return jsonify({"ok": True, "ts": int(time.time() * 1000)})
 
 def run_server():
     app.run(host='0.0.0.0', port=5000, threaded=True)
