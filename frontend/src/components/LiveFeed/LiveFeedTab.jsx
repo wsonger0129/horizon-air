@@ -20,16 +20,7 @@ export function LiveFeedTab() {
     >
       <div className="live-feed-tab__video-wrap">
         <DroneVideoPlaceholder />
-        <TelemetryOverlay telemetry={telemetry} />
-        <div
-          className="live-feed-tab__connection"
-          data-quality={connection.quality}
-          aria-live="polite"
-          aria-label={`Connection ${connection.quality}${connection.rttMs != null ? `, ${connection.rttMs} ms round-trip` : ''}`}
-        >
-          {connection.quality}
-          {connection.rttMs != null && ` · ${connection.rttMs} ms`}
-        </div>
+        <TelemetryOverlay telemetry={telemetry} connection={connection} />
       </div>
     </section>
   );

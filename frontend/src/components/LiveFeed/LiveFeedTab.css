@@ -16,34 +16,6 @@
   border: 2px solid var(--border);
 }
 
-.live-feed-tab__connection {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
-  padding: 6px 10px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border-radius: 8px;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  opacity: 0.9;
-}
-
-.live-feed-tab__connection[data-quality="good"] {
-  background: var(--success, #238636);
-  color: #fff;
-}
-
-.live-feed-tab__connection[data-quality="degraded"] {
-  background: var(--warning, #d29922);
-  color: #000;
-}
-
-.live-feed-tab__connection[data-quality="lost"] {
-  background: var(--danger, #f85149);
-  color: #fff;
-}
-
 @media (min-width: 768px) {
   .live-feed-tab {
     max-width: 720px;

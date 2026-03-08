@@ -1,7 +1,7 @@
 import React from 'react';
 import './TelemetryOverlay.css';
 
-export function TelemetryOverlay({ telemetry }) {
+export function TelemetryOverlay({ telemetry, connection }) {
   const { altitude, altitudeUnit, batteryPercent, signalStrength, signalMax } = telemetry;
   const signalBars = Array.from({ length: signalMax }, (_, i) => i < signalStrength);
 
@@ -19,6 +19,19 @@ export function TelemetryOverlay({ telemetry }) {
           {Math.round(batteryPercent)}%
         </span>
       </div>
+      {connection && (
+        <div
+          className="telemetry__item telemetry__item--connection"
+          data-quality={connection.quality}
+          aria-label={`Connection ${connection.quality}${connection.rttMs != null ? `, ${connection.rttMs} ms round-trip` : ''}`}
+        >
+          <span className="telemetry__label">PING</span>
+          <span className="telemetry__connection-value">
+            {connection.quality}
+            {connection.rttMs != null && ` · ${connection.rttMs} ms`}
+          </span>
+        </div>
+      )}
       <div className="telemetry__item telemetry__item--signal">
         <span className="telemetry__label">SIG</span>
         <span className="telemetry__signal" aria-label={`Signal strength ${signalStrength} of ${signalMax}`}>

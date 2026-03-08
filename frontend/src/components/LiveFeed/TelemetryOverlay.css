@@ -40,6 +40,23 @@
   color: var(--success);
 }
 
+.telemetry__item--connection .telemetry__connection-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.telemetry__item--connection[data-quality="good"] .telemetry__connection-value {
+  color: var(--success, #238636);
+}
+
+.telemetry__item--connection[data-quality="degraded"] .telemetry__connection-value {
+  color: var(--warning, #d29922);
+}
+
+.telemetry__item--connection[data-quality="lost"] .telemetry__connection-value {
+  color: var(--danger, #f85149);
+}
+
 .telemetry__item--signal {
   margin-left: auto;
 }
