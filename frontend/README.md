@@ -11,6 +11,10 @@ npm run dev
 
 Open the URL shown (e.g. `http://localhost:5173`) in a desktop browser. To use the **camera** or **compass** on an iPhone, the app must be loaded over HTTPS — use ngrok (see below).
 
+**Connecting to the Pi (live feed / telemetry):** The app uses the Pi’s **IP** by default: `http://192.168.50.1:5000` (HorizonAir network; aiPiCam.py Flask on port 5000). If the Pi has a different IP on your LAN (e.g. house Wi‑Fi), set `VITE_PI_BASE_URL=http://<Pi IP>:5000` in `frontend/.env.local` and restart `npm run dev`, or override at runtime via `localStorage.setItem('horizon_pi_url', 'http://<Pi IP>:5000'); location.reload();`.
+
+**If the feed doesn’t load:** Ensure `python3 pyCam/aiPiCam.py` is running on the Pi. On the Pi, check that port 5000 is listening (`ss -tlnp | grep 5000`) and that `curl http://127.0.0.1:5000/api/ping` returns JSON. If the Pi uses a firewall, allow port 5000 (e.g. `sudo ufw allow 5000`).
+
 ### Testing on iPhone with ngrok (HTTPS)
 
 Safari only allows camera and device orientation over HTTPS or localhost. To test on your phone over Wi‑Fi or cellular, expose the dev server via ngrok:
