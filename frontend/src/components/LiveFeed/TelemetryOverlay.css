@@ -79,14 +79,10 @@
   background: var(--success);
 }
 
-.telemetry__bar:nth-child(1) { height: 25%; }
-.telemetry__bar:nth-child(2) { height: 50%; }
-.telemetry__bar:nth-child(3) { height: 75%; }
-.telemetry__bar:nth-child(4) { height: 100%; }
-.telemetry__bar:nth-child(5) { height: 100%; }
+.telemetry__bar:nth-child(1) { height: 33%; }
+.telemetry__bar:nth-child(2) { height: 66%; }
+.telemetry__bar:nth-child(3) { height: 100%; }
 
-.telemetry__bar--on:nth-child(1) { height: 25%; }
-.telemetry__bar--on:nth-child(2) { height: 50%; }
-.telemetry__bar--on:nth-child(3) { height: 75%; }
-.telemetry__bar--on:nth-child(4) { height: 100%; }
-.telemetry__bar--on:nth-child(5) { height: 100%; }
+.telemetry__bar--on:nth-child(1) { height: 33%; }
+.telemetry__bar--on:nth-child(2) { height: 66%; }
+.telemetry__bar--on:nth-child(3) { height: 100%; }
