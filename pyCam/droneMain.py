@@ -16,8 +16,16 @@ Test mode (TEST_MODE = True):
   - Ignores Flask waypoint, auto-sets end point to (5, 0) — 5m straight ahead
   - Set TEST_MODE = False to use the waypoint from the web app
 
+API (FastAPI backend):
+  - Reads /drone/state from PI_API (waypoint, commands, phone GPS, RTT).
+  - Default: http://127.0.0.1:8000. For HTTPS (run_https.sh) set:
+      HORIZON_PI_API=https://127.0.0.1:8443
+    Self-signed cert is accepted (no verify). Same state store as backend/app/main.py.
+
 Run:
     python3 droneMain.py
+    # With HTTPS backend:
+    HORIZON_PI_API=https://127.0.0.1:8443 python3 droneMain.py
 
 Requires:
     pip3 install pymavlink --break-system-packages
@@ -34,16 +42,29 @@ import sys
 import os
 import urllib.request
 import json
+import ssl
 
 from pymavlink import mavutil
 
-# Import shared state store from FastAPI backend.
-# If running standalone (no FastAPI process), falls back to a local dummy store.
+# Import shared state store from FastAPI backend (backend/app/main.py).
+# Prefer backend so droneMain and API share the same state; fallback to local dummy.
+state_store = None
+_repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_backend = os.path.join(_repo_root, "backend")
+if _backend not in sys.path:
+    sys.path.insert(0, _backend)
 try:
-    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-    from main import state_store
-    print("[INIT] Connected to FastAPI state store.")
+    from app.main import state_store
+    print("[INIT] Connected to FastAPI state store (backend/app/main).")
 except ImportError:
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from main import state_store
+        print("[INIT] Connected to FastAPI state store (pyCam/main).")
+    except ImportError:
+        pass
+
+if state_store is None:
     # Fallback: create a local store so droneMain works without the API running
     class _FallbackStore:
         def __init__(self):
@@ -104,7 +125,8 @@ PROX_RESUME_STRIKES   = 3      # consecutive good readings before resuming
 PROX_STALE_TIMEOUT    = 5.0    # seconds without RTT update = treat as lost
 PROX_PINGS_PER_SECOND = 4      # pings averaged into each 1s measurement
 PROX_CHECK_INTERVAL   = 1.0    # seconds between each averaged measurement
-PI_API                = "http://127.0.0.1:8000"  # local FastAPI
+# Local FastAPI. Use HTTPS when using run_https.sh (e.g. HORIZON_PI_API=https://127.0.0.1:8443).
+PI_API                = os.environ.get("HORIZON_PI_API", "http://127.0.0.1:8000")
 
 # --- RC Override ---
 RC_OVERRIDE_CHANNEL   = 5
@@ -571,9 +593,16 @@ class MissionController:
         return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
     def _get_api_state(self):
-        """Fetch full /drone/state from local API."""
+        """Fetch full /drone/state from local API. Supports HTTP and HTTPS (skips cert verify for self-signed)."""
         try:
-            req = urllib.request.Request(f"{PI_API}/drone/state")
+            url = f"{PI_API}/drone/state"
+            req = urllib.request.Request(url)
+            if url.startswith("https://"):
+                ctx = ssl.create_default_context()
+                ctx.check_hostname = False
+                ctx.verify_mode = ssl.CERT_NONE
+                with urllib.request.urlopen(req, timeout=1, context=ctx) as resp:
+                    return json.loads(resp.read())
             with urllib.request.urlopen(req, timeout=1) as resp:
                 return json.loads(resp.read())
         except Exception:

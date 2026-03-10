@@ -35,7 +35,17 @@ export function useConnectionStrength(piBaseUrl) {
         if (cancelled) return;
         const ts = data?.ts;
         const rtt = typeof ts === 'number' ? Math.round(Date.now() - start) : null;
-        if (rtt !== null) setRttMs(rtt);
+        if (rtt !== null) {
+          setRttMs(rtt);
+          // Send to backend so droneMain can use RTT for proximity fallback
+          try {
+            fetch(`${piBaseUrl}/heartbeat`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ ts: data?.ts ?? Date.now() / 1000, rtt_ms: rtt }),
+            }).catch(() => {});
+          } catch (_) {}
+        }
         setLastSuccessAt(Date.now());
         failuresRef.current = 0;
         setConsecutiveFailures(0);

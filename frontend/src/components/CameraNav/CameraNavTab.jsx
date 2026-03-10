@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useCamera } from '../../hooks/useCamera';
 import { useGeolocation } from '../../hooks/useGeolocation';
+import { getPiBaseUrl } from '../../config/pi';
 import { mockNavigationTarget } from '../../api/mockData';
 import { CameraView } from './CameraView';
 import { CompassHeading } from './CompassHeading';
@@ -15,6 +16,22 @@ export function CameraNavTab() {
   const [heading, setHeading] = useState(null);
   const [headingError, setHeadingError] = useState(null);
   const nav = mockNavigationTarget;
+  const piBaseUrl = getPiBaseUrl();
+
+  // Send phone GPS to backend for droneMain proximity (GPS-based follow)
+  useEffect(() => {
+    if (!position || !piBaseUrl) return;
+    const send = () => {
+      fetch(`${piBaseUrl}/drone/phone_position`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lat: position.latitude, lon: position.longitude }),
+      }).catch(() => {});
+    };
+    send();
+    const interval = setInterval(send, 3000);
+    return () => clearInterval(interval);
+  }, [position, piBaseUrl]);
 
   useEffect(() => {
     if (!('DeviceOrientationEvent' in window)) {

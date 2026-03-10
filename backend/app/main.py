@@ -16,6 +16,7 @@ Run:
   HTTPS: ./run_https.sh  (for Safari GPS/camera/compass; use https://<Pi-IP>:8443)
 """
 
+from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -59,23 +60,36 @@ class DroneStateStore:
         self.detections      = []
         self.pending_command = None
         self.last_update     = time.time()
+        # For droneMain proximity: phone GPS (from web app), drone GPS (from FC), RTT (from heartbeat)
+        self.phone_lat       = None
+        self.phone_lon       = None
+        self.phone_gps_update = None
+        self.drone_lat       = None
+        self.drone_lon       = None
+        self.rtt_ms          = None
 
     def to_dict(self):
         return {
-            "pos_north":       self.pos_north,
-            "pos_east":        self.pos_east,
-            "altitude":        self.altitude,
-            "wp_north":        self.wp_north,
-            "wp_east":         self.wp_east,
-            "state":           self.state,
-            "armed":           self.armed,
-            "avoiding":        self.avoiding,
-            "rc_override":     self.rc_override,
-            "rssi":            self.rssi,
-            "lidar":           self.lidar,
-            "detections":      self.detections,
-            "pending_command": self.pending_command,
-            "last_update":     self.last_update,
+            "pos_north":        self.pos_north,
+            "pos_east":         self.pos_east,
+            "altitude":         self.altitude,
+            "wp_north":         self.wp_north,
+            "wp_east":          self.wp_east,
+            "state":            self.state,
+            "armed":            self.armed,
+            "avoiding":         self.avoiding,
+            "rc_override":      self.rc_override,
+            "rssi":             self.rssi,
+            "lidar":            self.lidar,
+            "detections":       self.detections,
+            "pending_command":  self.pending_command,
+            "last_update":      self.last_update,
+            "phone_lat":        self.phone_lat,
+            "phone_lon":        self.phone_lon,
+            "phone_gps_update": self.phone_gps_update,
+            "drone_lat":        self.drone_lat,
+            "drone_lon":       self.drone_lon,
+            "rtt_ms":          self.rtt_ms,
         }
 
 state_store = DroneStateStore()
@@ -216,6 +230,12 @@ class CommandRequest(BaseModel):
 
 class HeartbeatRequest(BaseModel):
     ts: float
+    rtt_ms: Optional[float] = None  # optional; stored for droneMain proximity fallback
+
+
+class PhonePositionRequest(BaseModel):
+    lat: float
+    lon: float
 
 
 # -----------------------------------------------------------------------
@@ -278,8 +298,19 @@ def send_command(req: CommandRequest):
 
 @app.post("/heartbeat")
 def heartbeat(req: HeartbeatRequest):
-    """Keeps WiFi radio active so iw station dump can read RSSI."""
+    """Keeps WiFi radio active; optional rtt_ms is stored for droneMain proximity fallback."""
+    if req.rtt_ms is not None:
+        state_store.rtt_ms = req.rtt_ms
     return {"ts": time.time()}
+
+
+@app.post("/drone/phone_position")
+def set_phone_position(req: PhonePositionRequest):
+    """Store phone GPS from web app for droneMain proximity (GPS-based follow)."""
+    state_store.phone_lat = req.lat
+    state_store.phone_lon = req.lon
+    state_store.phone_gps_update = time.time()
+    return {"status": "ok", "lat": req.lat, "lon": req.lon}
 
 
 @app.get("/stream")
