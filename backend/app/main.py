@@ -7,12 +7,13 @@ Video pipeline (no ffmpeg — saves ~50MB RAM + significant CPU):
   Pi CPU is barely involved in video encoding.
 
 Serves:
-  http://192.168.50.1:8000          → React app
-  http://192.168.50.1:8000/stream   → MJPEG video stream
-  http://192.168.50.1:8000/drone/*  → REST API
+  http://192.168.50.1:8000          → React app (or :8443 with HTTPS via run_https.sh)
+  /stream, /video_feed              → MJPEG video stream
+  /drone/*, /api/*                  → REST API
 
 Run:
-    uvicorn main:app --host 0.0.0.0 --port 8000
+  HTTP:  uvicorn app.main:app --host 0.0.0.0 --port 8000
+  HTTPS: ./run_https.sh  (for Safari GPS/camera/compass; use https://<Pi-IP>:8443)
 """
 
 from fastapi import FastAPI, HTTPException

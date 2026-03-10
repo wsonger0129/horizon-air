@@ -1,0 +1,2 @@
+# Ignore generated keys and certs (generate with run_https.sh)
+*.pem

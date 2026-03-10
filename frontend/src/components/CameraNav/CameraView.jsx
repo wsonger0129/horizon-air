@@ -16,7 +16,7 @@ export function CameraView({ stream, error, status, onStart, onStop }) {
         <p className="camera-view__message">{error}</p>
         <p className="camera-view__hint">
           {needsHttps
-            ? 'On iPhone: open this site over HTTPS (e.g. use ngrok: run "ngrok http 5173" on your laptop, then open the https:// URL in Safari). Or open http://localhost:5173 on your laptop only.'
+            ? 'On iPhone: open this site over HTTPS. When using the Pi, run ./run_https.sh on the Pi and open https://<Pi-IP>:8443 in Safari (accept the certificate). Or use ngrok for local dev.'
             : 'Allow camera in Safari settings and try again.'}
         </p>
         <button type="button" className="camera-view__btn" onClick={onStart}>

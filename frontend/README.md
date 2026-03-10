@@ -48,6 +48,19 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 Then open **http://192.168.50.1:8000** (or the Pi’s IP) on any device on the same network. The live stream, telemetry, and API all come from the Pi on port 8000.
 
+### 4. HTTPS on the Pi (for GPS, camera, compass in Safari)
+
+Safari requires a **secure context (HTTPS)** to prompt for location and camera. To run the app over HTTPS on the Pi:
+
+On the Pi:
+
+```bash
+cd /home/horizonair/horizon-air/backend
+./run_https.sh
+```
+
+On first run this generates a self-signed certificate (in `certs/`). Then open **https://&lt;Pi-IP&gt;:8443** in Safari on your phone (e.g. **https://192.168.50.1:8443**). Accept the certificate warning (“Show Details” → “Visit this website”), then the app will prompt you to allow **location** and (when you start the camera) **camera** access. GPS and compass will work after you tap “Enable GPS” and allow location.
+
 ### Testing on iPhone with ngrok (HTTPS)
 
 Safari only allows camera and device orientation over HTTPS or localhost. To test on your phone over Wi‑Fi or cellular, expose the dev server via ngrok:
