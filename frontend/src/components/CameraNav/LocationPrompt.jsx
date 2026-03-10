@@ -38,15 +38,23 @@ export function LocationPrompt({ isSecureContext, status, error, onRequest }) {
     <div className="location-prompt" role="status">
       <span className="location-prompt__icon" aria-hidden>📍</span>
       <p className="location-prompt__title">Allow location for GPS navigation</p>
-      <p className="location-prompt__text">This site uses your location to show distance and direction to the drone. Safari will ask for permission.</p>
+      <p className="location-prompt__text">
+        This site uses your location to show distance and direction to the drone. Tap the button below — Safari will then ask to use your location.
+      </p>
       <button
         type="button"
         className="location-prompt__btn"
-        onClick={onRequest}
+        onClick={(e) => {
+          e.preventDefault();
+          onRequest();
+        }}
         disabled={status === 'requesting'}
       >
         {status === 'requesting' ? 'Requesting…' : 'Enable GPS'}
       </button>
+      <p className="location-prompt__hint">
+        If no prompt appears: Settings → Privacy & Security → Location Services → Safari → set to “While Using” or “Ask”.
+      </p>
       {error && status !== 'requesting' && <p className="location-prompt__error">{error}</p>}
     </div>
   );

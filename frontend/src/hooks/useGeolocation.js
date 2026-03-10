@@ -25,8 +25,13 @@ export function useGeolocation(options = {}) {
       setStatus('unavailable');
       return;
     }
-    setStatus('requesting');
-    setError(null);
+    // Call getCurrentPosition immediately (before setState) so iOS Safari shows the permission
+    // prompt — it must run in the same user-gesture stack. maximumAge: 0 forces a fresh request.
+    const opts = {
+      enableHighAccuracy: true,
+      timeout: 20000,
+      maximumAge: 0, // iOS: 0 ensures the system prompt is shown instead of returning cached position
+    };
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setPosition({ latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy });
@@ -40,9 +45,11 @@ export function useGeolocation(options = {}) {
         setError(message);
         setStatus(err.code === 1 ? 'denied' : 'error');
       },
-      { enableHighAccuracy, timeout, maximumAge }
+      opts
     );
-  }, [enableHighAccuracy, timeout, maximumAge, isSecureContext]);
+    setStatus('requesting');
+    setError(null);
+  }, [isSecureContext]);
 
   return { position, error, status, isSecureContext, requestLocation };
 }
