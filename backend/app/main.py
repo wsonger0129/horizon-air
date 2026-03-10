@@ -34,7 +34,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
+# Repo layout: horizon-air/frontend/dist (build output). From backend/app/main.py -> ../.. = repo root.
+STATIC_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "frontend", "dist")
 
 
 # -----------------------------------------------------------------------
@@ -302,6 +303,52 @@ def video_stream():
     )
 
 
+@app.get("/video_feed")
+def video_feed_alias():
+    """Alias for /stream so frontend built for legacy Flask (aiPiCam) works when served from Pi."""
+    return video_stream()
+
+
+# -----------------------------------------------------------------------
+# COMPATIBILITY ROUTES — frontend expects these when talking to Pi
+# -----------------------------------------------------------------------
+
+@app.get("/api/ping")
+def api_ping():
+    """Ping for connection strength / RTT. Returns server time so client can compute RTT."""
+    return {"ts": time.time(), "status": "ok"}
+
+
+@app.get("/api/telemetry")
+def api_telemetry():
+    """Telemetry in the shape the React app expects (altitude, battery, signal, position, etc.)."""
+    s = state_store
+    rssi = s.rssi
+    signal_max = 100
+    if rssi is not None and isinstance(rssi, (int, float)):
+        # Map RSSI (e.g. -30 to -90) to 0–100 if you have a scale; else pass through
+        signal_strength = max(0, min(100, int(100 + (rssi + 50))))  # rough mapping
+    else:
+        signal_strength = None
+    return {
+        "altitude": s.altitude,
+        "altitudeUnit": "m",
+        "batteryPercent": None,
+        "signalStrength": signal_strength,
+        "signalMax": signal_max,
+        "latitude": 0.0,
+        "longitude": 0.0,
+        "heading": 0.0,
+        "speed": 0.0,
+    }
+
+
+@app.get("/api/scenic")
+def api_scenic():
+    """Scenic alerts. Return empty list; can later map from state_store.detections."""
+    return []
+
+
 # -----------------------------------------------------------------------
 # SERVE REACT APP — catch-all must be last
 # -----------------------------------------------------------------------
@@ -324,8 +371,8 @@ else:
         return {
             "status": "API running, frontend not deployed.",
             "instructions": [
-                "1. On laptop: cd frontend && npm run build",
+                "1. On laptop: cd frontend && npm run build:pi",
                 "2. scp -r dist/ horizonair@192.168.50.1:/home/horizonair/horizon-air/frontend/",
-                "3. Restart uvicorn"
+                "3. On Pi: cd backend && uvicorn app.main:app --host 0.0.0.0 --port 8000"
             ]
         }
