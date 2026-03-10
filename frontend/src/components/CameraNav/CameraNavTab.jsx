@@ -1,18 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useCamera } from '../../hooks/useCamera';
-import { useGeolocation } from '../../hooks/useGeolocation';
 import { getPiBaseUrl } from '../../config/pi';
 import { mockNavigationTarget } from '../../api/mockData';
 import { CameraView } from './CameraView';
 import { CompassHeading } from './CompassHeading';
 import { DirectionArrows } from './DirectionArrows';
 import { DistanceDisplay } from './DistanceDisplay';
-import { LocationPrompt } from './LocationPrompt';
 import './CameraNavTab.css';
 
-export function CameraNavTab() {
+export function CameraNavTab({ position }) {
   const { stream, error, status, startCamera, stopCamera } = useCamera();
-  const { position, error: locationError, status: locationStatus, isSecureContext, requestLocation } = useGeolocation();
   const [heading, setHeading] = useState(null);
   const [headingError, setHeadingError] = useState(null);
   const nav = mockNavigationTarget;
@@ -59,12 +56,6 @@ export function CameraNavTab() {
       aria-labelledby="tab-camera"
       className="camera-nav-tab"
     >
-      <LocationPrompt
-        isSecureContext={isSecureContext}
-        status={locationStatus}
-        error={locationError}
-        onRequest={requestLocation}
-      />
       <div className="camera-nav-tab__camera">
         <CameraView stream={stream} error={error} status={status} onStart={startCamera} onStop={stopCamera} />
       </div>
