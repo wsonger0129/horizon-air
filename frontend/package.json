@@ -4,10 +4,10 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "build:pi": "VITE_SERVE_FROM_PI=true vite build",
-    "preview": "vite preview"
+    "dev": "npx vite",
+    "build": "npx vite build",
+    "build:pi": "VITE_SERVE_FROM_PI=true npx vite build",
+    "preview": "npx vite preview"
   },
   "dependencies": {
     "react": "^18.2.0",
