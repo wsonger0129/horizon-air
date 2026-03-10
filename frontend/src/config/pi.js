@@ -1,7 +1,8 @@
 /**
- * Pi base URL for API and video (live feed at /video_feed).
- * Default: Pi IP on HorizonAir network (aiPiCam.py Flask on port 5000). Override via env or localStorage if IP differs.
- * Priority: window.HORIZON_PI_URL > localStorage horizon_pi_url > VITE_PI_BASE_URL > default.
+ * Pi base URL for API and video.
+ * When built for Pi (VITE_SERVE_FROM_PI=true), uses same origin so the app talks to the FastAPI backend on the same host.
+ * Otherwise: Pi IP (default 192.168.50.1:5000 for legacy Flask). Override via env or localStorage.
+ * Priority: window.HORIZON_PI_URL > localStorage horizon_pi_url > VITE_PI_BASE_URL > same-origin (Pi build) > default.
  */
 const DEFAULT_PI_BASE_URL = 'http://192.168.50.1:5000';
 
@@ -18,6 +19,10 @@ export function getPiBaseUrl() {
       const stored = normalizeUrl(localStorage.getItem('horizon_pi_url'));
       if (stored) return stored;
     } catch (_) {}
+    // Built for Pi: frontend is served by FastAPI on same host — use same origin for API/stream
+    if (import.meta.env?.VITE_SERVE_FROM_PI === 'true') {
+      return window.location.origin;
+    }
   }
   const env = import.meta.env?.VITE_PI_BASE_URL;
   if (env && typeof env === 'string') {

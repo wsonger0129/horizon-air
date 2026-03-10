@@ -8,7 +8,10 @@ import './DroneVideoPlaceholder.css';
 export function DroneVideoPlaceholder() {
   const [status, setStatus] = useState('connecting'); // 'connecting' | 'playing' | 'error'
   const piBaseUrl = getPiBaseUrl();
-  const videoFeedUrl = `${piBaseUrl}/video_feed`;
+  // FastAPI (Pi) uses /stream; legacy Flask uses /video_feed. Same-origin (Pi build) => /stream
+  const videoFeedUrl = piBaseUrl && import.meta.env?.VITE_SERVE_FROM_PI === 'true'
+    ? `${piBaseUrl}/stream`
+    : `${piBaseUrl}/video_feed`;
 
   const showPlaceholder = status === 'connecting' || status === 'error';
 

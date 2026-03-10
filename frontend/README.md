@@ -15,6 +15,39 @@ Open the URL shown (e.g. `http://localhost:5173`) in a desktop browser. To use t
 
 **If the feed doesn’t load:** Ensure `python3 pyCam/aiPiCam.py` is running on the Pi. On the Pi, check that port 5000 is listening (`ss -tlnp | grep 5000`) and that `curl http://127.0.0.1:5000/api/ping` returns JSON. If the Pi uses a firewall, allow port 5000 (e.g. `sudo ufw allow 5000`).
 
+## Run entire frontend on the Pi
+
+The React app can be built and served **entirely from the Raspberry Pi**. The FastAPI backend (`backend/app/main.py`) serves both the API and the built static files from `frontend/dist`. No need to run `npm run dev` on a laptop — open the Pi’s URL on your phone or laptop (e.g. on the HorizonAir hotspot: `http://192.168.50.1:8000`).
+
+### 1. Build for Pi (on your laptop or any machine with Node)
+
+```bash
+cd frontend
+npm install
+npm run build:pi
+```
+
+This runs `VITE_SERVE_FROM_PI=true vite build` so the app uses same-origin API/stream URLs when loaded from the Pi.
+
+### 2. Copy the build to the Pi
+
+```bash
+scp -r dist/ horizonair@192.168.50.1:/home/horizonair/horizon-air/frontend/
+```
+
+Use the Pi’s actual hostname or IP if different (e.g. your LAN IP if not on the hotspot).
+
+### 3. Run the backend on the Pi
+
+On the Pi, from the repo root:
+
+```bash
+cd /home/horizonair/horizon-air/backend
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+Then open **http://192.168.50.1:8000** (or the Pi’s IP) on any device on the same network. The live stream, telemetry, and API all come from the Pi on port 8000.
+
 ### Testing on iPhone with ngrok (HTTPS)
 
 Safari only allows camera and device orientation over HTTPS or localhost. To test on your phone over Wi‑Fi or cellular, expose the dev server via ngrok:
