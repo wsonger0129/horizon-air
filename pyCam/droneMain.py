@@ -12,6 +12,11 @@ Altitude cap:
   - MAX_ALTITUDE_M = 1.98 m (6.5 feet) — hard ceiling, never commanded higher
   - Keeps drone in visual line of sight for safety
 
+Flight mode:
+  - Always GUIDED_NOGPS — optical flow handles position hold and navigation
+  - GPS receiver (BE-880) is used ONLY to read drone coordinates for
+    proximity distance calculation vs phone GPS. It does not affect flight.
+
 Test mode (TEST_MODE = True):
   - Ignores Flask waypoint, auto-sets end point to (5, 0) — 5m straight ahead
   - Set TEST_MODE = False to use the waypoint from the web app
@@ -65,7 +70,6 @@ except ImportError:
         pass
 
 if state_store is None:
-    # Fallback: create a local store so droneMain works without the API running
     class _FallbackStore:
         def __init__(self):
             self.pos_north = 0.0;  self.pos_east = 0.0;  self.altitude = 0.0
@@ -113,6 +117,9 @@ PAUSE_RSSI_THRESHOLD  = -72  # dBm
 RESUME_RSSI_THRESHOLD = -68  # dBm
 
 # --- Proximity: GPS-based (primary) ---
+# Phone posts GPS to /drone/phone_position every 1s via the React app.
+# Drone GPS is read from FC via GPS_RAW_INT MAVLink messages.
+# Neither is used for flight — GUIDED_NOGPS + optical flow handles that.
 MAX_FOLLOW_RADIUS_M   = 30.0   # meters — pause if user is further than this
 RESUME_RADIUS_M       = 25.0   # meters — resume when user is back within this
 GPS_STALE_TIMEOUT     = 5.0    # seconds — treat GPS as lost if no update
@@ -125,7 +132,6 @@ PROX_RESUME_STRIKES   = 3      # consecutive good readings before resuming
 PROX_STALE_TIMEOUT    = 5.0    # seconds without RTT update = treat as lost
 PROX_PINGS_PER_SECOND = 4      # pings averaged into each 1s measurement
 PROX_CHECK_INTERVAL   = 1.0    # seconds between each averaged measurement
-# Local FastAPI. Use HTTPS when using run_https.sh (e.g. HORIZON_PI_API=https://127.0.0.1:8443).
 PI_API                = os.environ.get("HORIZON_PI_API", "http://127.0.0.1:8000")
 
 # --- RC Override ---
@@ -230,7 +236,6 @@ class MissionController:
         self.camera.start()
 
         # Local position tracking (dead reckoning from optical flow)
-        # Origin = (0, 0) at boot
         self.pos_north = 0.0
         self.pos_east  = 0.0
 
@@ -239,24 +244,19 @@ class MissionController:
         self.wp_east   = None
 
         # Flight state flags
-        self.armed               = False
-        self.mission_paused      = False
-        self.avoiding            = False
-        self.manual_override     = False
-        self.flight_state        = "IDLE"   # IDLE|ARMED|TAKEOFF|FLYING|LANDING|COMPLETE|ABORT
+        self.armed           = False
+        self.mission_paused  = False
+        self.avoiding        = False
+        self.manual_override = False
+        self.flight_state    = "IDLE"   # IDLE|ARMED|TAKEOFF|FLYING|LANDING|COMPLETE|ABORT
 
-        # GPS mode — set at startup by _check_gps_fix()
-        self.gps_fix             = False    # True = 3D fix available
-        self.guided_mode         = "GUIDED_NOGPS"  # overridden to "GUIDED" if fix found
-
-        # Proximity (RTT) gating
+        # Proximity gating
         self.prox_paused         = False
         self.prox_pause_strikes  = 0
         self.prox_resume_strikes = 0
-        self.prox_baseline       = None   # set during calibration at startup
-        self.prox_pause_thresh   = None   # baseline * 1.25
-        self.prox_resume_thresh  = None   # baseline * 1.0 (back to baseline)
-        self._last_prox_check    = 0.0    # time of last proximity poll
+        self.prox_baseline       = None   # RTT baseline set during calibration
+        self.prox_pause_thresh   = None   # baseline * PROX_PAUSE_MULTIPLIER
+        self._last_prox_check    = 0.0
 
         # CSV log
         with open(LOG_FILE, "w") as f:
@@ -320,14 +320,13 @@ class MissionController:
         print("[DISARM] Disarmed.")
 
     # ------------------------------------------------------------------
-    # ALTITUDE READ
+    # ALTITUDE
     # ------------------------------------------------------------------
 
     def _get_altitude(self):
-        """Read current altitude from DISTANCE_SENSOR (MTF-01 lidar, downward)."""
         msg = self.master.recv_match(type="LOCAL_POSITION_NED", blocking=False)
         if msg:
-            return abs(msg.z)   # NED: z is negative up, absolute value = altitude
+            return abs(msg.z)
         return None
 
     def _get_lidar(self):
@@ -337,43 +336,33 @@ class MissionController:
         return None
 
     # ------------------------------------------------------------------
-    # LOCAL POSITION (optical flow dead reckoning)
+    # LOCAL POSITION (optical flow)
     # ------------------------------------------------------------------
 
     def _update_local_position(self):
-        """
-        Read LOCAL_POSITION_NED from the FC (populated by optical flow EKF).
-        x = north meters, y = east meters from arming origin.
-        """
         msg = self.master.recv_match(type="LOCAL_POSITION_NED", blocking=False)
         if msg:
             self.pos_north = msg.x
             self.pos_east  = msg.y
-            return abs(msg.z)   # altitude
+            return abs(msg.z)
         return None
 
     # ------------------------------------------------------------------
-    # VELOCITY COMMANDS (body frame)
+    # VELOCITY COMMANDS
     # ------------------------------------------------------------------
 
     def _send_velocity_ned(self, vn, ve, vd):
-        """
-        Send velocity in NED local frame.
-        vn = north m/s, ve = east m/s, vd = down m/s (positive = descend)
-        Altitude cap: never send upward command that would exceed MAX_ALTITUDE_M.
-        """
         alt = self._get_altitude()
-        if alt is not None and vd < 0:   # vd < 0 means climbing
+        if alt is not None and vd < 0:
             if alt >= MAX_ALTITUDE_M:
-                vd = 0   # clamp: do not climb further
-                print(f"[ALT CAP] At {alt:.2f}m — climb command blocked (cap={MAX_ALTITUDE_M}m)")
-
+                vd = 0
+                print(f"[ALT CAP] At {alt:.2f}m — climb blocked (cap={MAX_ALTITUDE_M}m)")
         self.master.mav.set_position_target_local_ned_send(
             0,
             self.master.target_system,
             self.master.target_component,
             mavutil.mavlink.MAV_FRAME_LOCAL_NED,
-            0b0000111111000111,   # velocity only
+            0b0000111111000111,
             0, 0, 0,
             vn, ve, vd,
             0, 0, 0,
@@ -381,7 +370,6 @@ class MissionController:
         )
 
     def _send_velocity_body(self, vx, vy, vz):
-        """Body-frame velocity (forward/back, right/left, up/down)."""
         alt = self._get_altitude()
         if alt is not None and vz < 0:
             if alt >= MAX_ALTITUDE_M:
@@ -403,13 +391,9 @@ class MissionController:
     # ------------------------------------------------------------------
 
     def _takeoff(self):
-        """
-        Climb to CRUISE_ALT_M using velocity commands.
-        Respects MAX_ALTITUDE_M cap.
-        """
         target = min(CRUISE_ALT_M, MAX_ALTITUDE_M)
         print(f"[TAKEOFF] Climbing to {target:.2f}m (cap={MAX_ALTITUDE_M}m)")
-        self._set_mode(self.guided_mode)
+        self._set_mode("GUIDED_NOGPS")
         time.sleep(0.5)
 
         deadline = time.time() + 15
@@ -421,7 +405,6 @@ class MissionController:
             if alt >= target - 0.15:
                 print(f"\n[TAKEOFF] Reached {alt:.2f}m")
                 return True
-            # Climb slowly, stop at cap
             vd = -CLIMB_RATE_MS if alt < MAX_ALTITUDE_M else 0
             self._send_velocity_ned(0, 0, vd)
             time.sleep(1.0 / POSITION_SEND_HZ)
@@ -434,10 +417,6 @@ class MissionController:
     # ------------------------------------------------------------------
 
     def _fly_to_waypoint(self):
-        """
-        Fly from current local position to (wp_north, wp_east) using
-        velocity commands. Checks for obstacles and RC override every loop.
-        """
         if self.wp_north is None:
             return False
 
@@ -448,12 +427,8 @@ class MissionController:
             if self.manual_override:
                 return False
 
-            # Update position from optical flow
             alt = self._update_local_position()
-            if alt:
-                self.pos_north = self.pos_north  # already updated in _update
 
-            # Distance to waypoint
             dn = self.wp_north - self.pos_north
             de = self.wp_east  - self.pos_east
             dist = math.sqrt(dn**2 + de**2)
@@ -464,7 +439,6 @@ class MissionController:
                 print(f"\n[NAV] Waypoint reached.")
                 return True
 
-            # Camera obstacle check
             if not self.avoiding:
                 blocked, desc = self._check_camera_obstacle()
                 if blocked:
@@ -472,19 +446,17 @@ class MissionController:
                     self._execute_avoidance()
                     continue
 
-            # Velocity toward waypoint (normalized, scaled to FLY_SPEED_MS)
             scale = FLY_SPEED_MS / dist
             vn = dn * scale
             ve = de * scale
 
-            # Maintain altitude
             curr_alt = alt or 0
             target_alt = min(CRUISE_ALT_M, MAX_ALTITUDE_M)
             vd = 0
             if curr_alt < target_alt - 0.1:
-                vd = -CLIMB_RATE_MS   # climb
+                vd = -CLIMB_RATE_MS
             elif curr_alt > target_alt + 0.1:
-                vd = CLIMB_RATE_MS    # descend
+                vd = CLIMB_RATE_MS
 
             self._send_velocity_ned(vn, ve, vd)
             time.sleep(interval)
@@ -502,7 +474,7 @@ class MissionController:
             if alt < 0.15:
                 print("\n[LAND] Touchdown.")
                 break
-            self._send_velocity_ned(0, 0, CLIMB_RATE_MS)  # positive vd = descend
+            self._send_velocity_ned(0, 0, CLIMB_RATE_MS)
             time.sleep(0.1)
         self._set_mode("LAND")
         time.sleep(2)
@@ -526,7 +498,7 @@ class MissionController:
         self.avoiding = True
         self._set_mode("BRAKE")
         time.sleep(0.8)
-        self._set_mode(self.guided_mode)
+        self._set_mode("GUIDED_NOGPS")
         end = time.time() + AVOID_BACKUP_DURATION
         while time.time() < end:
             self._send_velocity_body(AVOID_BACKUP_SPEED, 0, 0)
@@ -535,56 +507,22 @@ class MissionController:
         time.sleep(1.0)
         still, _ = self._check_camera_obstacle()
         if not still:
-            self._set_mode(self.guided_mode)
+            self._set_mode("GUIDED_NOGPS")
             self.avoiding = False
-
-
-    # ------------------------------------------------------------------
-    # GPS FIX CHECK
-    # ------------------------------------------------------------------
-
-    def _check_gps_fix(self, timeout=10):
-        """
-        Waits up to `timeout` seconds for a GPS_RAW_INT message with fix_type >= 3
-        (3D fix). Sets self.gps_fix and self.guided_mode accordingly.
-
-        fix_type values:
-          0 = No GPS
-          1 = No fix
-          2 = 2D fix
-          3 = 3D fix  ← minimum for GUIDED mode
-          4 = DGPS
-          6 = RTK float / RTK fixed
-        """
-        print(f"\n[GPS] Checking for 3D fix (waiting up to {timeout}s)...")
-        deadline = time.time() + timeout
-
-        while time.time() < deadline:
-            msg = self.master.recv_match(type="GPS_RAW_INT", blocking=True, timeout=1)
-            if msg:
-                fix = msg.fix_type
-                sats = msg.satellites_visible
-                fix_names = {0: "No GPS", 1: "No fix", 2: "2D fix",
-                             3: "3D fix", 4: "DGPS", 5: "RTK float", 6: "RTK fixed"}
-                fix_str = fix_names.get(fix, f"type {fix}")
-                print(f"  GPS: {fix_str}, satellites: {sats}")
-
-                if fix >= 3:
-                    self.gps_fix     = True
-                    self.guided_mode = "GUIDED"
-                    print(f"[GPS] 3D fix confirmed — using GUIDED mode")
-                    return
-
-        print(f"[GPS] No 3D fix within {timeout}s — using GUIDED_NOGPS (optical flow)")
-        self.gps_fix     = False
-        self.guided_mode = "GUIDED_NOGPS"
 
     # ------------------------------------------------------------------
     # PROXIMITY CHECK (GPS primary, RTT fallback)
+    #
+    # GPS:  Phone posts lat/lon to /drone/phone_position every 1s via app.
+    #       Drone lat/lon is read from FC GPS_RAW_INT messages.
+    #       Haversine formula gives real distance in meters.
+    #       Neither coordinate is used for flight — only for this check.
+    #
+    # RTT:  Fallback when GPS is unavailable (indoors, no fix).
+    #       Averaged pings vs dynamic baseline calibrated at startup.
     # ------------------------------------------------------------------
 
     def _haversine(self, lat1, lon1, lat2, lon2):
-        """Calculate distance in meters between two GPS coordinates."""
         R = 6371000
         phi1, phi2 = math.radians(lat1), math.radians(lat2)
         dphi = math.radians(lat2 - lat1)
@@ -593,7 +531,7 @@ class MissionController:
         return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
     def _get_api_state(self):
-        """Fetch full /drone/state from local API. Supports HTTP and HTTPS (skips cert verify for self-signed)."""
+        """Fetch /drone/state from local API. Supports HTTP and HTTPS."""
         try:
             url = f"{PI_API}/drone/state"
             req = urllib.request.Request(url)
@@ -610,8 +548,10 @@ class MissionController:
 
     def _get_gps_distance(self):
         """
-        Returns distance in meters between phone and drone using GPS.
-        Returns None if either GPS source is unavailable or stale.
+        Returns distance in meters between phone and drone.
+        Phone GPS comes from /drone/phone_position (posted by React app).
+        Drone GPS comes from FC GPS_RAW_INT (read in _sync_state).
+        Returns None if either source is missing or stale.
         """
         data = self._get_api_state()
         if data is None:
@@ -621,6 +561,7 @@ class MissionController:
         gps_update = data.get("phone_gps_update")
         drone_lat  = state_store.drone_lat
         drone_lon  = state_store.drone_lon
+
         if any(v is None for v in (phone_lat, phone_lon, drone_lat, drone_lon)):
             return None
         if gps_update is not None and time.time() - gps_update > GPS_STALE_TIMEOUT:
@@ -628,14 +569,13 @@ class MissionController:
         return self._haversine(phone_lat, phone_lon, drone_lat, drone_lon)
 
     def _get_rtt(self):
-        """Fetch rtt_ms from /drone/state for RTT fallback."""
         data = self._get_api_state()
         if data is None:
             return None, None
         return data.get("rtt_ms"), data.get("last_update")
 
     def _get_averaged_rtt(self):
-        """Average PROX_PINGS_PER_SECOND readings over 1 second."""
+        """Collect PROX_PINGS_PER_SECOND RTT readings over 1 second and average them."""
         samples = []
         interval = PROX_CHECK_INTERVAL / PROX_PINGS_PER_SECOND
         for _ in range(PROX_PINGS_PER_SECOND):
@@ -648,8 +588,9 @@ class MissionController:
 
     def _calibrate_proximity(self):
         """
-        Calibrate RTT baseline at startup for use as fallback.
-        Always runs so fallback is ready even if GPS starts fine.
+        Collect PROX_BASELINE_SAMPLES averaged RTT readings at startup.
+        Establishes the RTT baseline used as fallback when GPS is unavailable.
+        Always runs — even if GPS is available, fallback should be ready.
         """
         print(f"\n[PROX] Calibrating RTT baseline — collecting {PROX_BASELINE_SAMPLES} readings")
         print(f"[PROX] Each reading averages {PROX_PINGS_PER_SECOND} pings over 1 second.")
@@ -676,17 +617,15 @@ class MissionController:
             print(f"\n[PROX] RTT baseline:     {self.prox_baseline:.1f}ms")
             print(f"[PROX] RTT pause thresh: >{self.prox_pause_thresh:.1f}ms")
 
-        print(f"[PROX] GPS mode:  pause >{MAX_FOLLOW_RADIUS_M}m | resume <{RESUME_RADIUS_M}m")
-        print(f"[PROX] Fallback:  {'RTT' if self.prox_baseline else 'DISABLED'}\n")
+        print(f"[PROX] GPS:      pause >{MAX_FOLLOW_RADIUS_M}m | resume <{RESUME_RADIUS_M}m")
+        print(f"[PROX] Fallback: {'RTT' if self.prox_baseline else 'DISABLED — no GPS, no RTT'}\n")
 
     def _check_proximity(self):
         """
-        Primary:  GPS distance between phone and drone.
-                  Pause if > MAX_FOLLOW_RADIUS_M, resume if < RESUME_RADIUS_M.
-        Fallback: Averaged RTT vs dynamic baseline (125% threshold).
-                  Activates automatically when GPS is unavailable.
-        Both use the same 3-strike rule.
-        Only active during FLYING or TAKEOFF states.
+        Called every loop tick. Rate-limited to once per PROX_CHECK_INTERVAL.
+        Primary:  GPS distance (phone vs drone). Pause > 30m, resume < 25m.
+        Fallback: Averaged RTT vs baseline * 125%. Used when GPS unavailable.
+        Both use 3-strike rule. Only active during FLYING or TAKEOFF.
         Returns True if mission should be paused.
         """
         if self.flight_state not in ("FLYING", "TAKEOFF"):
@@ -706,7 +645,7 @@ class MissionController:
             val_str    = f"{dist:.1f}m"
             thresh_str = f"{MAX_FOLLOW_RADIUS_M}m"
         else:
-            # GPS unavailable — fall back to RTT
+            # Fall back to RTT
             if self.prox_baseline is None:
                 return self.prox_paused
             avg_rtt    = self._get_averaged_rtt()
@@ -732,13 +671,17 @@ class MissionController:
             self.prox_pause_strikes = 0
 
         elif self.prox_paused and self.prox_resume_strikes >= PROX_RESUME_STRIKES:
-            print(f"[PROX/{mode}] Back in range ({val_str}) — resuming {self.guided_mode}")
-            self._set_mode(self.guided_mode)
+            print(f"[PROX/{mode}] Back in range ({val_str}) — resuming GUIDED_NOGPS")
+            self._set_mode("GUIDED_NOGPS")
             self.prox_paused         = False
             self.mission_paused      = False
             self.prox_resume_strikes = 0
 
         return self.prox_paused
+
+    # ------------------------------------------------------------------
+    # RC OVERRIDE
+    # ------------------------------------------------------------------
 
     def _check_rc_override(self):
         msg = self.master.recv_match(type="RC_CHANNELS", blocking=False)
@@ -781,21 +724,22 @@ class MissionController:
     # ------------------------------------------------------------------
 
     def _sync_state(self, rssi, lidar, detections):
-        state_store.pos_north  = self.pos_north
-        state_store.pos_east   = self.pos_east
-        state_store.altitude   = self._get_altitude() or 0
-        state_store.state      = self.flight_state
-        state_store.armed      = self.armed
-        state_store.avoiding   = self.avoiding
+        state_store.pos_north   = self.pos_north
+        state_store.pos_east    = self.pos_east
+        state_store.altitude    = self._get_altitude() or 0
+        state_store.state       = self.flight_state
+        state_store.armed       = self.armed
+        state_store.avoiding    = self.avoiding
         state_store.rc_override = self.manual_override
-        state_store.rssi       = rssi
-        state_store.lidar      = lidar
-        state_store.detections = [d["category"] for d in detections]
+        state_store.rssi        = rssi
+        state_store.lidar       = lidar
+        state_store.detections  = [d["category"] for d in detections]
         state_store.last_update = time.time()
 
-        # Update drone GPS from flight controller
+        # Read drone GPS from FC — stored for proximity distance calculation only.
+        # Not used for flight control (drone always flies in GUIDED_NOGPS).
         gps_msg = self.master.recv_match(type="GPS_RAW_INT", blocking=False)
-        if gps_msg and gps_msg.fix_type >= 3:   # 3D fix required
+        if gps_msg and gps_msg.fix_type >= 3:
             state_store.drone_lat = gps_msg.lat / 1e7
             state_store.drone_lon = gps_msg.lon / 1e7
 
@@ -831,7 +775,6 @@ class MissionController:
             self.flight_state = "ABORT"
         elif cmd == "land":
             self.flight_state = "LANDING"
-        # arm and takeoff are handled in the main sequence
 
     # ------------------------------------------------------------------
     # MAIN SEQUENCE
@@ -841,7 +784,9 @@ class MissionController:
         print("\n" + "="*55)
         print("  HORIZONAIR DRONE CONTROLLER")
         print(f"  Max altitude: {MAX_ALTITUDE_M}m ({MAX_ALTITUDE_M*3.281:.1f} ft)")
-        print(f"  Test mode: {TEST_MODE}")
+        print(f"  Flight mode:  GUIDED_NOGPS (optical flow)")
+        print(f"  Proximity:    GPS primary, RTT fallback")
+        print(f"  Test mode:    {TEST_MODE}")
         if TEST_MODE:
             print(f"  Test waypoint: {TEST_WAYPOINT_NORTH}m N, {TEST_WAYPOINT_EAST}m E")
         print("="*55 + "\n")
@@ -852,7 +797,7 @@ class MissionController:
             self.wp_east  = TEST_WAYPOINT_EAST
             state_store.wp_north = self.wp_north
             state_store.wp_east  = self.wp_east
-            print(f"[INIT] Test waypoint set: ({self.wp_north}, {self.wp_east})")
+            print(f"[INIT] Test waypoint: ({self.wp_north}, {self.wp_east})")
         else:
             print("[INIT] Waiting for waypoint from web app...")
             while state_store.wp_north is None:
@@ -863,10 +808,7 @@ class MissionController:
             self.wp_east  = state_store.wp_east
             print(f"[INIT] Waypoint received: ({self.wp_north}, {self.wp_east})")
 
-        # Check for GPS 3D fix — determines GUIDED vs GUIDED_NOGPS
-        self._check_gps_fix(timeout=10)
-
-        # Calibrate proximity baseline before arming
+        # Calibrate RTT baseline for proximity fallback
         self._calibrate_proximity()
 
         # ── MAIN CONTROL LOOP ─────────────────────────────────────
@@ -901,10 +843,9 @@ class MissionController:
                 # ── STATE MACHINE ─────────────────────────────────
 
                 if self.flight_state == "IDLE":
-                    # Wait for arm command from app (or auto-arm in test mode)
                     if TEST_MODE or state_store.pending_command == "arm":
                         state_store.pending_command = None
-                        self._set_mode(self.guided_mode)
+                        self._set_mode("GUIDED_NOGPS")
                         if self._arm():
                             self.flight_state = "TAKEOFF"
 
@@ -915,7 +856,6 @@ class MissionController:
                         self.flight_state = "ABORT"
 
                 elif self.flight_state == "FLYING":
-                    # Lidar safety check
                     if lidar is not None and lidar < SAFE_LIDAR_DISTANCE:
                         print(f"[LIDAR] {lidar:.2f}m — BRAKE")
                         self._set_mode("BRAKE")
@@ -926,6 +866,7 @@ class MissionController:
                 elif self.flight_state == "LANDING":
                     self._land()
                     self._disarm()
+                    self._set_mode("LOITER")
                     self.flight_state = "COMPLETE"
                     print("[DONE] Mission complete.")
 
@@ -935,7 +876,6 @@ class MissionController:
                 elif self.flight_state == "ABORT":
                     self._set_mode("LOITER")
 
-                # Sync state to API and log
                 self._sync_state(rssi, lidar, detections)
                 self._log(rssi, lidar, detections)
 
