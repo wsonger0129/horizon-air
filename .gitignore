@@ -1,0 +1,7 @@
+__pycache__
+
+# Dependencies — install with npm install
+node_modules/
+
+# Frontend build output — build with npm run build:pi and scp dist/ to the Pi
+frontend/dist/

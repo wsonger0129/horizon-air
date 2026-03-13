@@ -7,11 +7,13 @@ import { DirectionArrows } from './DirectionArrows';
 import { DistanceDisplay } from './DistanceDisplay';
 import './CameraNavTab.css';
 
-export function CameraNavTab() {
+export function CameraNavTab({ position }) {
   const { stream, error, status, startCamera, stopCamera } = useCamera();
   const [heading, setHeading] = useState(null);
   const [headingError, setHeadingError] = useState(null);
   const nav = mockNavigationTarget;
+
+  // GPS posting removed — now handled in App.jsx so it runs on all tabs
 
   useEffect(() => {
     if (!('DeviceOrientationEvent' in window)) {

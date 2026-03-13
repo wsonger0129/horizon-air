@@ -1,10 +1,12 @@
 import React from 'react';
-import { useMockScenicAlerts } from '../../hooks/useMockScenicAlerts';
+import { getPiBaseUrl } from '../../config/pi';
+import { usePiScenicAlerts } from '../../hooks/usePiScenicAlerts';
 import { AlertCard } from './AlertCard';
 import './ScenicAlertsTab.css';
 
 export function ScenicAlertsTab() {
-  const { alerts, navigateToLocation } = useMockScenicAlerts();
+  const piBaseUrl = getPiBaseUrl();
+  const { alerts, navigateToLocation } = usePiScenicAlerts(piBaseUrl);
 
   return (
     <section

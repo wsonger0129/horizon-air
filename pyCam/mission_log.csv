@@ -1,0 +1,2 @@
+time,pos_n,pos_e,alt,wp_n,wp_e,state,rssi,lidar,detections,avoiding
+1773277107.5559466,0.0,0.0,0,5.0,0.0,IDLE,,,,False
