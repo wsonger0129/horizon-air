@@ -132,9 +132,7 @@ PROX_RESUME_STRIKES   = 3      # consecutive good readings before resuming
 PROX_STALE_TIMEOUT    = 5.0    # seconds without RTT update = treat as lost
 PROX_PINGS_PER_SECOND = 4      # pings averaged into each 1s measurement
 PROX_CHECK_INTERVAL   = 1.0    # seconds between each averaged measurement
-# Same API as FastAPI backend (main.py). Use 127.0.0.1 when droneMain runs on the Pi
-# so GET /drone/state and POST /drone/phone_position (from app) share the same state_store.
-PI_API                = os.environ.get("HORIZON_PI_API", "http://127.0.0.1:8000")
+PI_API                = os.environ.get("HORIZON_PI_API", "http://192.168.50.1:8443")
 
 # --- RC Override ---
 RC_OVERRIDE_CHANNEL   = 5
@@ -167,17 +165,15 @@ class CameraDetector:
         try:
             from picamera2 import Picamera2
             from picamera2.devices.imx500 import IMX500
-            from picamera2.devices.imx500.postprocess_highernet import (
-                postprocess_nanodet_detection,
-            )
+            from picamera2.devices.imx500.postprocess_highernet import \
+                postprocess_nanodet_detection
             self._Picamera2 = Picamera2
             self._IMX500 = IMX500
             self._postprocess = postprocess_nanodet_detection
             self._camera_available = True
             print("[CAMERA] IMX500 AI camera available.")
-        except (ImportError, ModuleNotFoundError) as e:
-            print(f"[CAMERA] Pi camera not available ({e}) — camera avoidance disabled.")
-            print("[CAMERA] On Pi with AI camera: sudo apt install python3-picamera2 imx500-all -y")
+        except ImportError:
+            print("[CAMERA] picamera2 not found — camera avoidance disabled.")
 
     def start(self):
         if not self._camera_available:
@@ -279,17 +275,6 @@ class MissionController:
         master = mavutil.mavlink_connection(UART_PORT, baud=BAUD_RATE)
         master.wait_heartbeat()
         print("[CONNECT] Heartbeat received.")
-        # Request GPS at 2Hz for proximity (phone vs drone). Not used for flight (GUIDED_NOGPS).
-        master.mav.command_long_send(
-            master.target_system,
-            master.target_component,
-            mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
-            0,
-            mavutil.mavlink.MAVLINK_MSG_ID_GPS_RAW_INT,
-            500000,  # interval in microseconds (0.5s = 2Hz)
-            0, 0, 0, 0, 0
-        )
-        print("[CONNECT] Requested GPS_RAW_INT at 2Hz.")
         return master
 
     # ------------------------------------------------------------------
@@ -414,7 +399,6 @@ class MissionController:
         deadline = time.time() + 15
         while time.time() < deadline:
             if self.manual_override:
-                print("manual overide")
                 return False
             alt = self._get_altitude() or 0
             print(f"  Alt: {alt:.2f}m / {target:.2f}m", end="\r")
@@ -565,19 +549,42 @@ class MissionController:
     def _get_gps_distance(self):
         """
         Returns distance in meters between phone and drone.
-        Phone GPS: from POST /drone/phone_position (React app) → same state_store.
-        Drone GPS: from FC GPS_RAW_INT, written in _sync_state() into state_store.
-        We GET /drone/state from PI_API (same backend) so both are in one place.
+        Phone GPS comes from /drone/phone_position (posted by React app).
+        Drone GPS comes from FC GPS_RAW_INT (read in _sync_state).
         Returns None if either source is missing or stale.
         """
         data = self._get_api_state()
         if data is None:
             return None
-        phone_lat   = data.get("phone_lat")
-        phone_lon   = data.get("phone_lon")
-        gps_update  = data.get("phone_gps_update")
-        drone_lat   = data.get("drone_lat")
-        drone_lon   = data.get("drone_lon")
+        phone_lat  = data.get("phone_lat")
+        phone_lon  = data.get("phone_lon")
+        gps_update = data.get("phone_gps_update")
+
+
+        # request GPS location
+        connection = mavutil.mavlink_connection(UART_PORT, baud=BAUD_RATE)    
+        connection.mav.command_long_send(
+            connection.target_system,
+            connection.target_component,
+            mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
+            0,
+            mavutil.mavlink.MAVLINK_MSG_ID_GPS_RAW_INT,
+            500000,   # interval in microseconds (0.5s)
+            0, 0, 0, 0, 0
+        )
+        msg = connection.recv_match(type='GPS_RAW_INT', blocking=True)
+        if msg:
+            print("GPS status:", msg.fix_type)
+            print("Satellites:", msg.satellites_visible)
+            print("Lat:", msg.lat / 1e7)
+            print("Lon:", msg.lon / 1e7)
+            print()
+            drone_lat  = msg.lat / 1e7
+            drone_lon  = msg.lon / 1e7
+            while True:
+                print()
+                time.sleep(1)
+
         if any(v is None for v in (phone_lat, phone_lon, drone_lat, drone_lon)):
             return None
         if gps_update is not None and time.time() - gps_update > GPS_STALE_TIMEOUT:
