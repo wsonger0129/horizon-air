@@ -323,6 +323,7 @@ def heartbeat(req: HeartbeatRequest):
     """Keeps WiFi radio active; optional rtt_ms is stored for droneMain proximity fallback."""
     if req.rtt_ms is not None:
         state_store.rtt_ms = req.rtt_ms
+        state_store.last_update = time.time()  # so droneMain accepts RTT (within PROX_STALE_TIMEOUT)
     return {"ts": time.time()}
 
 
