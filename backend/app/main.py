@@ -239,11 +239,33 @@ class PhonePositionRequest(BaseModel):
 
 
 # -----------------------------------------------------------------------
+# FREE CAMERA BEFORE USE
+# -----------------------------------------------------------------------
+
+def _free_camera():
+    """
+    Kill any process holding the camera so rpicam-vid can open it.
+    Run before starting the stream to avoid 'device or resource busy'.
+    """
+    for pattern in ("rpicam-vid", "rpicam-hello", "rpicam-still", "libcamera"):
+        try:
+            subprocess.run(
+                ["pkill", "-f", pattern],
+                capture_output=True,
+                timeout=2,
+            )
+        except (FileNotFoundError, subprocess.TimeoutExpired, Exception):
+            pass
+    time.sleep(0.5)  # allow device to be released
+
+
+# -----------------------------------------------------------------------
 # STARTUP
 # -----------------------------------------------------------------------
 
 @app.on_event("startup")
 async def startup_event():
+    _free_camera()
     camera_stream.start()
     print("[SERVER] HorizonAir running at http://192.168.50.1:8000")
     print("[SERVER] Open this URL on any device on the HorizonAir hotspot.")
