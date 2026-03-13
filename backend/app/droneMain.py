@@ -120,8 +120,8 @@ RESUME_RSSI_THRESHOLD = -68  # dBm
 # Phone posts GPS to /drone/phone_position every 1s via the React app.
 # Drone GPS is read from FC via GPS_RAW_INT MAVLink messages.
 # Neither is used for flight — GUIDED_NOGPS + optical flow handles that.
-MAX_FOLLOW_RADIUS_M   = 30.0   # meters — pause if user is further than this
-RESUME_RADIUS_M       = 25.0   # meters — resume when user is back within this
+MAX_FOLLOW_RADIUS_M   = 2.5   # meters — pause if user is further than this
+RESUME_RADIUS_M       = 2   # meters — resume when user is back within this
 GPS_STALE_TIMEOUT     = 5.0    # seconds — treat GPS as lost if no update
 
 # --- Proximity: RTT-based fallback (used when GPS unavailable) ---
@@ -132,6 +132,8 @@ PROX_RESUME_STRIKES   = 3      # consecutive good readings before resuming
 PROX_STALE_TIMEOUT    = 5.0    # seconds without RTT update = treat as lost
 PROX_PINGS_PER_SECOND = 4      # pings averaged into each 1s measurement
 PROX_CHECK_INTERVAL   = 1.0    # seconds between each averaged measurement
+# Same API as FastAPI backend (main.py). Use 127.0.0.1 when droneMain runs on the Pi
+# so GET /drone/state and POST /drone/phone_position (from app) share the same state_store.
 PI_API                = os.environ.get("HORIZON_PI_API", "http://127.0.0.1:8000")
 
 # --- RC Override ---
@@ -165,15 +167,17 @@ class CameraDetector:
         try:
             from picamera2 import Picamera2
             from picamera2.devices.imx500 import IMX500
-            from picamera2.devices.imx500.postprocess_highernet import \
-                postprocess_nanodet_detection
+            from picamera2.devices.imx500.postprocess_highernet import (
+                postprocess_nanodet_detection,
+            )
             self._Picamera2 = Picamera2
             self._IMX500 = IMX500
             self._postprocess = postprocess_nanodet_detection
             self._camera_available = True
             print("[CAMERA] IMX500 AI camera available.")
-        except ImportError:
-            print("[CAMERA] picamera2 not found — camera avoidance disabled.")
+        except (ImportError, ModuleNotFoundError) as e:
+            print(f"[CAMERA] Pi camera not available ({e}) — camera avoidance disabled.")
+            print("[CAMERA] On Pi with AI camera: sudo apt install python3-picamera2 imx500-all -y")
 
     def start(self):
         if not self._camera_available:
@@ -275,6 +279,17 @@ class MissionController:
         master = mavutil.mavlink_connection(UART_PORT, baud=BAUD_RATE)
         master.wait_heartbeat()
         print("[CONNECT] Heartbeat received.")
+        # Request GPS at 2Hz for proximity (phone vs drone). Not used for flight (GUIDED_NOGPS).
+        master.mav.command_long_send(
+            master.target_system,
+            master.target_component,
+            mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL,
+            0,
+            mavutil.mavlink.MAVLINK_MSG_ID_GPS_RAW_INT,
+            500000,  # interval in microseconds (0.5s = 2Hz)
+            0, 0, 0, 0, 0
+        )
+        print("[CONNECT] Requested GPS_RAW_INT at 2Hz.")
         return master
 
     # ------------------------------------------------------------------
@@ -549,18 +564,19 @@ class MissionController:
     def _get_gps_distance(self):
         """
         Returns distance in meters between phone and drone.
-        Phone GPS comes from /drone/phone_position (posted by React app).
-        Drone GPS comes from FC GPS_RAW_INT (read in _sync_state).
+        Phone GPS: from POST /drone/phone_position (React app) → same state_store.
+        Drone GPS: from FC GPS_RAW_INT, written in _sync_state() into state_store.
+        We GET /drone/state from PI_API (same backend) so both are in one place.
         Returns None if either source is missing or stale.
         """
         data = self._get_api_state()
         if data is None:
             return None
-        phone_lat  = data.get("phone_lat")
-        phone_lon  = data.get("phone_lon")
-        gps_update = data.get("phone_gps_update")
-        drone_lat  = state_store.drone_lat
-        drone_lon  = state_store.drone_lon
+        phone_lat   = data.get("phone_lat")
+        phone_lon   = data.get("phone_lon")
+        gps_update  = data.get("phone_gps_update")
+        drone_lat   = data.get("drone_lat")
+        drone_lon   = data.get("drone_lon")
 
         if any(v is None for v in (phone_lat, phone_lon, drone_lat, drone_lon)):
             return None
