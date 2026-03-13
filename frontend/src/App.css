@@ -20,4 +20,15 @@
   min-height: 0;
   gap: 12px;
   padding: 12px;
+  overflow: auto;
+}
+
+.app__feed-wrap .live-feed-tab {
+  flex: 1;
+  min-height: 0;
+}
+
+.app__feed-wrap .live-feed-tab__video-wrap {
+  flex: 1;
+  min-height: 240px;
 }

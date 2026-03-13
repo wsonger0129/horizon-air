@@ -14,9 +14,8 @@ export function LiveFeedTab() {
   return (
     <section
       id="panel-feed"
-      role="tabpanel"
-      aria-labelledby="tab-feed"
       className="live-feed-tab"
+      aria-label="Live drone feed"
     >
       <div className="live-feed-tab__video-wrap">
         <DroneVideoPlaceholder />
