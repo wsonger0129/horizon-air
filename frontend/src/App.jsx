@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React from 'react';
 import { AppHeader } from './components/Layout/AppHeader';
 import { LiveFeedTab } from './components/LiveFeed/LiveFeedTab';
 import { LocationPrompt } from './components/CameraNav/LocationPrompt';
@@ -8,10 +8,10 @@ import './App.css';
 export default function App() {
   const geolocation = useGeolocation();
 
-  // Request GPS as soon as the user enters the site.
-  useEffect(() => {
-    geolocation.requestLocation();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Don't auto-request on load: it caused the prompt to disappear right after refresh on iPhone
+  // (getCurrentPosition can resolve very quickly when permission was already granted). Request
+  // only when the user taps "Enable GPS" so the prompt stays visible and the system dialog is
+  // triggered by a user gesture.
 
   return (
     <div className="app">
